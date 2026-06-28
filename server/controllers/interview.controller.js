@@ -224,13 +224,31 @@ export const generateQuestion=async (req,res)=>{
 
 export const submitAnswer = async (req,res)=>{
     try{
-        const {interviewId,questionIndex,answer,timetaken}=req.body
+        const { interviewId, questionIndex, answer, timeTaken, timetaken } = req.body;
+        const elapsedTime = typeof timeTaken !== 'undefined' ? timeTaken : timetaken;
+        const index = Number(questionIndex);
 
-            const interview = await Interview.findById(interviewId)
-            const question = interview.questions[questionIndex]
+        if (!interviewId) {
+            return res.status(400).json({ message: "interviewId is required." });
+        }
 
-            // If no answer
-            if (!answer) {
+        if (!Number.isInteger(index) || index < 0) {
+            return res.status(400).json({ message: "Valid questionIndex is required." });
+        }
+
+        const interview = await Interview.findById(interviewId);
+
+        if (!interview) {
+            return res.status(404).json({ message: "Interview not found." });
+        }
+
+        const question = interview.questions[index];
+
+        if (!question) {
+            return res.status(400).json({ message: "Question not found for the provided index." });
+        }
+
+        if (!answer) {
             question.score = 0;
             question.feedback = "You did not submit an answer.";
             question.answer = "";
@@ -240,26 +258,24 @@ export const submitAnswer = async (req,res)=>{
             return res.json({
                 feedback: question.feedback
             });
-            }
-
-                // If time exceeded
-        if (timeTaken > question.timeLimit) {
-        question.score = 0;
-        question.feedback = "Time limit exceeded. Answer not evaluated.";
-        question.answer = answer;
-
-        await interview.save();
-
-        return res.json({
-            feedback: question.feedback
-        });
         }
 
+        if (typeof elapsedTime === 'number' && elapsedTime > question.timeLimit) {
+            question.score = 0;
+            question.feedback = "Time limit exceeded. Answer not evaluated.";
+            question.answer = answer;
 
-       const messages = [
-      {
-        role: "system",
-        content: `
+            await interview.save();
+
+            return res.json({
+                feedback: question.feedback
+            });
+        }
+
+        const messages = [
+            {
+                role: "system",
+                content: `
         You are a professional human interviewer evaluating a candidate's answer in a real interview.
 
         Evaluate naturally and fairly, like a real person would.
@@ -299,8 +315,7 @@ export const submitAnswer = async (req,res)=>{
         "feedback": "short human feedback"
         }
         `
-            }
-            ,
+            },
             {
                 role: "user",
                 content: `
@@ -308,25 +323,25 @@ export const submitAnswer = async (req,res)=>{
         Answer: ${answer}
         `
             }
-            ];
+        ];
 
-            const aiResponse=askAi(messages)
+        const aiResponse = await askAi(messages);
+        const parsed = JSON.parse(aiResponse);
 
-                const parsed = JSON.parse(aiResponse);
+        question.answer = answer;
+        question.confidence = parsed.confidence;
+        question.communication = parsed.communication;
+        question.correctness = parsed.correctness;
+        question.score = parsed.finalScore;
+        question.feedback = parsed.feedback;
 
-                question.answer = answer;
-                question.confidence = parsed.confidence;
-                question.communication = parsed.communication;
-                question.correctness = parsed.correctness;
-                question.score = parsed.finalScore;
-                question.feedback = parsed.feedback;
-                await interview.save();
+        await interview.save();
 
-                return res.status(200).json({feedback:parsed.feedback})
+        return res.status(200).json({ feedback: parsed.feedback });
 
-    }catch(error){
-           return res.status(500).json({message:`failed to submit answer ${error}`})
-
+    } catch (error) {
+        console.error("submitAnswer error:", error);
+        return res.status(500).json({ message: `failed to submit answer: ${error.message || error}` });
     }
 }
 
