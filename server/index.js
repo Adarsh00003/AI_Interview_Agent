@@ -11,7 +11,7 @@ dotenv.config()
 
 const app = express()
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: "https://ai-interview-agent-client-75xp.onrender.com",
     credentials: true
 }))
 
