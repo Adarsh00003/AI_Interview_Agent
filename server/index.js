@@ -10,10 +10,27 @@ import paymentRouter from './routes/payment.route.js'
 dotenv.config()
 
 const app = express()
+//const cors = require("cors");
+
+const allowedOrigins = [
+  "http://localhost:5173",                  // Dev
+  "https://ai-interview-agent-rho.vercel.app" // Vercel prod
+];
+
 app.use(cors({
-    origin: "https://ai-interview-agent-rho.vercel.app/",
-    credentials: true
-}))
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 
 const PORT = process.env.PORT || 6000
 
